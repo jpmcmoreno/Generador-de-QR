@@ -15,13 +15,13 @@
   header h1 { margin: 0; font-size: 22px; }
   header p { margin: 4px 0 0; font-size: 14px; opacity: .85; }
   main { max-width: 1050px; margin: 24px auto; padding: 0 16px; }
-  .pestanas { display: flex; gap: 8px; margin-bottom: 16px; }
+  .pestanas { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .pestanas button { border: 1px solid var(--borde); background: #fff; color: var(--acento); padding: 10px 18px;
     border-radius: 999px; font-size: 14px; font-weight: 600; cursor: pointer; }
   .pestanas button.activa { background: var(--acento); color: #fff; border-color: var(--acento); }
   .grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; }
   @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
-  .tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 16px; padding: 20px; }
+  .tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 16px; padding: 20px; min-width: 0; }
   label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
   label:first-child { margin-top: 0; }
   input[type=text], textarea, select, input[type=number] { width: 100%; padding: 10px 12px; border: 1px solid var(--borde);
@@ -32,7 +32,7 @@
   .colores { display: flex; align-items: center; gap: 8px; }
   input[type=color] { width: 44px; height: 38px; border: 1px solid var(--borde); border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
   input[type=range] { width: 100%; accent-color: var(--acento2); }
-  .vista { display: flex; flex-direction: column; align-items: center; gap: 14px; position: sticky; top: 16px; }
+  .vista { display: flex; flex-direction: column; align-items: center; gap: 14px; position: sticky; top: 16px; align-self: start; }
   .vista .lienzo { width: 100%; aspect-ratio: 1 / 1.15; display: flex; align-items: center; justify-content: center;
     background: repeating-conic-gradient(#eef2ee 0% 25%, #fff 0% 50%) 50% / 20px 20px; border-radius: 12px; border: 1px dashed var(--borde); }
   .vista img { max-width: 92%; max-height: 92%; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
@@ -116,19 +116,94 @@
   </div>
 </main>
 
+<script src="lib/qrcode.js"></script>
+<script src="lib/jszip.min.js"></script>
 <script>
+  // Todo funciona en el navegador: no necesita servidor (sirve para GitHub Pages).
+  qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8']; // tildes, ñ, emojis
+
   let modo = 'uno';
   let espera;
   const $ = id => document.getElementById(id);
+  const colorValido = (v, d) => /^#[0-9a-fA-F]{6}$/.test(v || '') ? v : d;
+  const limitar = (v, min, max, d) => { v = parseInt(v, 10); return Math.max(min, Math.min(isNaN(v) ? d : v, max)); };
 
   function opciones() {
     return {
       texto: $('texto').value, titulo: $('titulo').value,
       color: $('color').value, fondo: $('fondo').value,
-      tamano: +$('tamano').value, borde: +$('borde').value,
-      correccion: $('correccion').value,
-      lista: $('lista').value, con_titulo: $('con_titulo').checked
+      tamano: +$('tamano').value, borde: $('borde').value,
+      correccion: $('correccion').value
     };
+  }
+
+  // Dibuja el QR (y el título debajo) en un canvas
+  function crearQR(d) {
+    const texto = (d.texto || '').trim();
+    if (!texto) throw new Error('Escribe un enlace o texto para el QR.');
+    const titulo = (d.titulo || '').trim();
+    const color = colorValido(d.color, '#000000');
+    const fondo = colorValido(d.fondo, '#ffffff');
+    const tamano = limitar(d.tamano, 200, 2000, 800);
+    const borde = limitar(d.borde, 0, 10, 4);
+    const nivel = ['L', 'M', 'Q', 'H'].includes(d.correccion) ? d.correccion : 'H';
+
+    const qr = qrcode(0, nivel);
+    qr.addData(texto);
+    try { qr.make(); } catch (e) { throw new Error('El texto es demasiado largo para un QR.'); }
+
+    const n = qr.getModuleCount();
+    const modulos = n + borde * 2;
+    const paso = Math.max(1, Math.floor(tamano / modulos)); // cuadritos de tamaño exacto
+    const desfase = Math.floor((tamano - modulos * paso) / 2) + borde * paso;
+
+    // Preparar líneas del título
+    const fuentePx = Math.max(16, Math.floor(tamano / 16));
+    const fuente = `bold ${fuentePx}px Arial, "Segoe UI", "DejaVu Sans", sans-serif`;
+    const medir = document.createElement('canvas').getContext('2d');
+    medir.font = fuente;
+    const lineas = [];
+    if (titulo) {
+      let actual = '';
+      for (const palabra of titulo.split(/\s+/)) {
+        const prueba = (actual + ' ' + palabra).trim();
+        if (medir.measureText(prueba).width <= tamano - 40) actual = prueba;
+        else { if (actual) lineas.push(actual); actual = palabra; }
+      }
+      if (actual) lineas.push(actual);
+    }
+    const altoLinea = Math.round(fuentePx * 1.3);
+    const margen = Math.floor(tamano / 30);
+    const altoTexto = lineas.length ? altoLinea * lineas.length + margen * 2 : 0;
+
+    const c = document.createElement('canvas');
+    c.width = tamano; c.height = tamano + altoTexto;
+    const g = c.getContext('2d');
+    g.fillStyle = fondo; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = color;
+    for (let f = 0; f < n; f++)
+      for (let k = 0; k < n; k++)
+        if (qr.isDark(f, k)) g.fillRect(desfase + k * paso, desfase + f * paso, paso, paso);
+
+    if (lineas.length) {
+      g.font = fuente; g.textAlign = 'center'; g.textBaseline = 'top';
+      let y = tamano + Math.floor(margen / 2);
+      for (const l of lineas) { g.fillText(l, tamano / 2, y); y += altoLinea; }
+    }
+    return c;
+  }
+
+  function nombreArchivo(t) {
+    const limpio = (t || '').normalize('NFC').replace(/[^\p{L}\p{N}_\- ]/gu, '').trim().replace(/ /g, '_');
+    return (limpio || 'codigo_qr').slice(0, 60);
+  }
+
+  function leerLista() {
+    return $('lista').value.split('\n').map(s => s.trim()).filter(Boolean).map(l => {
+      const i = l.indexOf('|');
+      const [t, u] = i >= 0 ? [l.slice(0, i).trim(), l.slice(i + 1).trim()] : ['', l];
+      return { titulo: $('con_titulo').checked ? t : '', nombre: t || u, texto: u };
+    });
   }
 
   function cambiarModo(m) {
@@ -140,34 +215,24 @@
     actualizar();
   }
 
-  function primeraLinea() {
-    const l = $('lista').value.split('\n').map(s => s.trim()).filter(Boolean)[0];
-    if (!l) return null;
-    const [t, u] = l.includes('|') ? l.split('|', 2).map(s => s.trim()) : ['', l];
-    return { titulo: $('con_titulo').checked ? t : '', texto: u };
-  }
-
-  async function actualizar() {
+  function actualizar() {
     $('color-txt').textContent = $('color').value;
     $('fondo-txt').textContent = $('fondo').value;
     $('tamano-txt').textContent = $('tamano').value;
     clearTimeout(espera);
-    espera = setTimeout(async () => {
+    espera = setTimeout(() => {
       let datos = opciones();
       if (modo === 'varios') {
-        const p = primeraLinea();
-        if (!p) return mostrarVacio('Escribe al menos una línea para ver la vista previa');
-        datos = { ...datos, ...p };
-        const n = $('lista').value.split('\n').filter(s => s.trim()).length;
-        $('descargar').textContent = `Descargar ${n} QR (.zip)`;
+        const lista = leerLista();
+        if (!lista.length) return mostrarVacio('Escribe al menos una línea para ver la vista previa');
+        datos = { ...datos, ...lista[0] };
+        $('descargar').textContent = `Descargar ${lista.length} QR (.zip)`;
       } else {
         $('descargar').textContent = 'Descargar PNG';
         if (!datos.texto.trim()) return mostrarVacio('Escribe un enlace para ver la vista previa');
       }
       try {
-        const r = await fetch('/api/qr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) });
-        if (!r.ok) throw new Error((await r.json()).error);
-        const url = URL.createObjectURL(await r.blob());
+        const url = crearQR(datos).toDataURL('image/png');
         $('lienzo').innerHTML = `<img src="${url}" alt="Vista previa del QR">`;
         $('descargar').disabled = false;
         $('mensaje').textContent = modo === 'varios' ? 'Vista previa del primer QR de la lista' : '';
@@ -177,7 +242,7 @@
         $('mensaje').textContent = e.message;
         $('mensaje').style.color = 'var(--error)';
       }
-    }, 250);
+    }, 200);
   }
 
   function mostrarVacio(txt) {
@@ -186,19 +251,36 @@
     $('mensaje').textContent = '';
   }
 
+  const aBlob = c => new Promise(r => c.toBlob(r, 'image/png'));
+
+  function bajar(blob, nombre) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = nombre;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
   async function descargar() {
-    const ruta = modo === 'uno' ? '/api/qr' : '/api/lote';
-    const datos = { ...opciones(), descargar: true };
     $('descargar').disabled = true;
     try {
-      const r = await fetch(ruta, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) });
-      if (!r.ok) throw new Error((await r.json()).error);
-      const blob = await r.blob();
-      const nombre = (r.headers.get('Content-Disposition') || '').match(/filename\*?=(?:UTF-8'')?"?([^";]+)/);
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = nombre ? decodeURIComponent(nombre[1]) : (modo === 'uno' ? 'codigo_qr.png' : 'codigos_qr.zip');
-      a.click();
+      const base = opciones();
+      if (modo === 'uno') {
+        bajar(await aBlob(crearQR(base)), nombreArchivo(base.titulo) + '.png');
+      } else {
+        const zip = new JSZip(), usados = new Set();
+        let i = 0;
+        for (const item of leerLista()) {
+          i++;
+          let canvas;
+          try { canvas = crearQR({ ...base, texto: item.texto, titulo: item.titulo }); } catch (e) { continue; }
+          let nombre = String(i).padStart(2, '0') + '_' + nombreArchivo(item.nombre);
+          while (usados.has(nombre)) nombre += '_';
+          usados.add(nombre);
+          zip.file(nombre + '.png', await aBlob(canvas));
+        }
+        bajar(await zip.generateAsync({ type: 'blob' }), 'codigos_qr.zip');
+      }
     } catch (e) {
       $('mensaje').textContent = e.message;
       $('mensaje').style.color = 'var(--error)';

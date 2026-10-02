@@ -1,0 +1,18 @@
+GENERADOR DE QR - VERSION PARA GITHUB PAGES
+============================================
+
+Esta version funciona 100% en el navegador (no necesita Python ni servidor).
+Por defecto: color negro y resistencia a danos Maxima (30%).
+
+COMO PUBLICARLO EN GITHUB PAGES
+1. En github.com crea un repositorio nuevo (por ejemplo: generador-qr), publico.
+2. Entra al repositorio > "Add file" > "Upload files".
+3. Arrastra TODO el contenido de esta carpeta (index.html, la carpeta lib y .nojekyll).
+   Importante: sube el CONTENIDO, no la carpeta "Generador QR - GitHub Pages" en si.
+   (Si .nojekyll no se ve en Windows, no pasa nada: es opcional.)
+4. Clic en "Commit changes".
+5. Ve a Settings > Pages > en "Branch" elige "main" y carpeta "/ (root)" > Save.
+6. Espera 1-2 minutos. La pagina quedara en:
+   https://TU-USUARIO.github.io/generador-qr/
+
+Tambien puedes abrir index.html con doble clic para usarlo sin internet.
