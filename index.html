@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Generador de QR</title>
+<style>
+  :root {
+    --fondo: #f4f7f4; --tarjeta: #ffffff; --borde: #c7d7c9; --texto: #2f3e46;
+    --suave: #5c6b70; --acento: #354f52; --acento2: #52796f; --error: #b42318;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--fondo); color: var(--texto); }
+  header { background: var(--acento); color: #fff; padding: 18px 24px; }
+  header h1 { margin: 0; font-size: 22px; }
+  header p { margin: 4px 0 0; font-size: 14px; opacity: .85; }
+  main { max-width: 1050px; margin: 24px auto; padding: 0 16px; }
+  .pestanas { display: flex; gap: 8px; margin-bottom: 16px; }
+  .pestanas button { border: 1px solid var(--borde); background: #fff; color: var(--acento); padding: 10px 18px;
+    border-radius: 999px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .pestanas button.activa { background: var(--acento); color: #fff; border-color: var(--acento); }
+  .grid { display: grid; grid-template-columns: 1fr 380px; gap: 20px; }
+  @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
+  .tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 16px; padding: 20px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
+  label:first-child { margin-top: 0; }
+  input[type=text], textarea, select, input[type=number] { width: 100%; padding: 10px 12px; border: 1px solid var(--borde);
+    border-radius: 10px; font-size: 14px; font-family: inherit; color: var(--texto); background: #fff; }
+  textarea { min-height: 170px; resize: vertical; font-family: Consolas, monospace; font-size: 13px; }
+  .ayuda { font-size: 12px; color: var(--suave); margin-top: 4px; }
+  .fila { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .colores { display: flex; align-items: center; gap: 8px; }
+  input[type=color] { width: 44px; height: 38px; border: 1px solid var(--borde); border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
+  input[type=range] { width: 100%; accent-color: var(--acento2); }
+  .vista { display: flex; flex-direction: column; align-items: center; gap: 14px; position: sticky; top: 16px; }
+  .vista .lienzo { width: 100%; aspect-ratio: 1 / 1.15; display: flex; align-items: center; justify-content: center;
+    background: repeating-conic-gradient(#eef2ee 0% 25%, #fff 0% 50%) 50% / 20px 20px; border-radius: 12px; border: 1px dashed var(--borde); }
+  .vista img { max-width: 92%; max-height: 92%; box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+  .vacio { color: var(--suave); font-size: 14px; text-align: center; padding: 20px; }
+  .boton { width: 100%; padding: 12px; border: none; border-radius: 12px; background: var(--acento2); color: #fff;
+    font-size: 15px; font-weight: 600; cursor: pointer; }
+  .boton:hover { background: var(--acento); }
+  .boton:disabled { opacity: .5; cursor: not-allowed; }
+  .mensaje { font-size: 13px; color: var(--error); min-height: 18px; text-align: center; }
+  .oculto { display: none; }
+  .check { display: flex; align-items: center; gap: 8px; font-weight: 500; margin-top: 14px; font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Generador de códigos QR</h1>
+  <p>Pega un enlace, personaliza y descarga tu QR listo para imprimir.</p>
+</header>
+
+<main>
+  <div class="pestanas">
+    <button id="tab-uno" class="activa" onclick="cambiarModo('uno')">Un QR</button>
+    <button id="tab-varios" onclick="cambiarModo('varios')">Varios QR a la vez</button>
+  </div>
+
+  <div class="grid">
+    <div class="tarjeta">
+      <!-- Modo: un QR -->
+      <div id="modo-uno">
+        <label for="texto">Enlace o texto</label>
+        <input type="text" id="texto" placeholder="https://ejemplo.com/no-alimentar-aves">
+        <label for="titulo">Título debajo del QR (opcional)</label>
+        <input type="text" id="titulo" placeholder="No alimentar a las aves">
+      </div>
+
+      <!-- Modo: varios QR -->
+      <div id="modo-varios" class="oculto">
+        <label for="lista">Un QR por línea, con el formato: Título | enlace</label>
+        <textarea id="lista" placeholder="No alimentar a las aves | https://ejemplo.com/aves&#10;Cuidado del agua | https://ejemplo.com/agua&#10;Reciclaje | https://ejemplo.com/reciclaje"></textarea>
+        <div class="ayuda">Si una línea no tiene "|", se usa toda la línea como enlace y no lleva título.</div>
+        <label class="check"><input type="checkbox" id="con_titulo" checked> Poner el título debajo de cada QR</label>
+      </div>
+
+      <div class="fila">
+        <div>
+          <label>Color del QR</label>
+          <div class="colores"><input type="color" id="color" value="#000000"><span id="color-txt" class="ayuda">#000000</span></div>
+        </div>
+        <div>
+          <label>Color de fondo</label>
+          <div class="colores"><input type="color" id="fondo" value="#ffffff"><span id="fondo-txt" class="ayuda">#ffffff</span></div>
+        </div>
+      </div>
+
+      <label for="tamano">Tamaño: <span id="tamano-txt">800</span> px</label>
+      <input type="range" id="tamano" min="300" max="2000" step="50" value="800">
+
+      <div class="fila">
+        <div>
+          <label for="borde">Margen blanco</label>
+          <input type="number" id="borde" min="0" max="10" value="4">
+        </div>
+        <div>
+          <label for="correccion">Resistencia a daños</label>
+          <select id="correccion">
+            <option value="L">Baja (7%)</option>
+            <option value="M">Media (15%)</option>
+            <option value="Q">Alta (25%)</option>
+            <option value="H" selected>Máxima (30%)</option>
+          </select>
+        </div>
+      </div>
+      <div class="ayuda">Con más resistencia, el QR se puede leer aunque esté un poco sucio o rayado (ideal para impresos al aire libre).</div>
+    </div>
+
+    <div class="tarjeta vista">
+      <div class="lienzo" id="lienzo"><div class="vacio">Escribe un enlace para ver la vista previa</div></div>
+      <button class="boton" id="descargar" onclick="descargar()" disabled>Descargar PNG</button>
+      <div class="mensaje" id="mensaje"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+  let modo = 'uno';
+  let espera;
+  const $ = id => document.getElementById(id);
+
+  function opciones() {
+    return {
+      texto: $('texto').value, titulo: $('titulo').value,
+      color: $('color').value, fondo: $('fondo').value,
+      tamano: +$('tamano').value, borde: +$('borde').value,
+      correccion: $('correccion').value,
+      lista: $('lista').value, con_titulo: $('con_titulo').checked
+    };
+  }
+
+  function cambiarModo(m) {
+    modo = m;
+    $('tab-uno').classList.toggle('activa', m === 'uno');
+    $('tab-varios').classList.toggle('activa', m === 'varios');
+    $('modo-uno').classList.toggle('oculto', m !== 'uno');
+    $('modo-varios').classList.toggle('oculto', m !== 'varios');
+    actualizar();
+  }
+
+  function primeraLinea() {
+    const l = $('lista').value.split('\n').map(s => s.trim()).filter(Boolean)[0];
+    if (!l) return null;
+    const [t, u] = l.includes('|') ? l.split('|', 2).map(s => s.trim()) : ['', l];
+    return { titulo: $('con_titulo').checked ? t : '', texto: u };
+  }
+
+  async function actualizar() {
+    $('color-txt').textContent = $('color').value;
+    $('fondo-txt').textContent = $('fondo').value;
+    $('tamano-txt').textContent = $('tamano').value;
+    clearTimeout(espera);
+    espera = setTimeout(async () => {
+      let datos = opciones();
+      if (modo === 'varios') {
+        const p = primeraLinea();
+        if (!p) return mostrarVacio('Escribe al menos una línea para ver la vista previa');
+        datos = { ...datos, ...p };
+        const n = $('lista').value.split('\n').filter(s => s.trim()).length;
+        $('descargar').textContent = `Descargar ${n} QR (.zip)`;
+      } else {
+        $('descargar').textContent = 'Descargar PNG';
+        if (!datos.texto.trim()) return mostrarVacio('Escribe un enlace para ver la vista previa');
+      }
+      try {
+        const r = await fetch('/api/qr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) });
+        if (!r.ok) throw new Error((await r.json()).error);
+        const url = URL.createObjectURL(await r.blob());
+        $('lienzo').innerHTML = `<img src="${url}" alt="Vista previa del QR">`;
+        $('descargar').disabled = false;
+        $('mensaje').textContent = modo === 'varios' ? 'Vista previa del primer QR de la lista' : '';
+        $('mensaje').style.color = 'var(--suave)';
+      } catch (e) {
+        mostrarVacio('No se pudo generar el QR');
+        $('mensaje').textContent = e.message;
+        $('mensaje').style.color = 'var(--error)';
+      }
+    }, 250);
+  }
+
+  function mostrarVacio(txt) {
+    $('lienzo').innerHTML = `<div class="vacio">${txt}</div>`;
+    $('descargar').disabled = true;
+    $('mensaje').textContent = '';
+  }
+
+  async function descargar() {
+    const ruta = modo === 'uno' ? '/api/qr' : '/api/lote';
+    const datos = { ...opciones(), descargar: true };
+    $('descargar').disabled = true;
+    try {
+      const r = await fetch(ruta, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) });
+      if (!r.ok) throw new Error((await r.json()).error);
+      const blob = await r.blob();
+      const nombre = (r.headers.get('Content-Disposition') || '').match(/filename\*?=(?:UTF-8'')?"?([^";]+)/);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = nombre ? decodeURIComponent(nombre[1]) : (modo === 'uno' ? 'codigo_qr.png' : 'codigos_qr.zip');
+      a.click();
+    } catch (e) {
+      $('mensaje').textContent = e.message;
+      $('mensaje').style.color = 'var(--error)';
+    }
+    $('descargar').disabled = false;
+  }
+
+  ['texto','titulo','color','fondo','tamano','borde','correccion','lista','con_titulo']
+    .forEach(id => $(id).addEventListener('input', actualizar));
+</script>
+</body>
+</html>
